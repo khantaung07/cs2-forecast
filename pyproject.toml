@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cs2forecast"
+version = "0.1.0"
+description = "CS2 match forecasting using Liquipedia MediaWiki API data, map modelling, and walk-forward backtesting."
+requires-python = ">=3.11"
+dependencies = [
+    "requests>=2.31.0",
+    "typer>=0.12.0",
+    "rich>=13.7.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.4.0",
+]
+
+[project.scripts]
+cs2forecast = "cs2forecast.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100

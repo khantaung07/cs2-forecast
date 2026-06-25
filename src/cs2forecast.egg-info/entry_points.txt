@@ -1,0 +1,2 @@
+[console_scripts]
+cs2forecast = cs2forecast.cli:app
