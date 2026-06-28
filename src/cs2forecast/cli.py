@@ -14,6 +14,16 @@ from cs2forecast.parsing.template_inspector import (
 from cs2forecast.parsing.parse_raw_pages import parse_raw_pages
 from cs2forecast.storage.db import connect
 
+from cs2forecast.backtesting.elo_backtest import (
+    backtest_constant_baseline_on_maps,
+    backtest_constant_baseline_on_matches,
+    backtest_map_elo,
+    backtest_overall_elo,
+)
+
+from pathlib import Path
+from cs2forecast.ingestion.seeds import read_seed_titles
+
 app = typer.Typer(help="CS2 forecasting pipeline.")
 console = Console()
 
@@ -29,9 +39,43 @@ def init_database() -> None:
 def scrape(
     titles: list[str] = typer.Argument(..., help="Liquipedia page titles to fetch."),
     refresh: bool = typer.Option(False, help="Re-fetch pages even if cached locally."),
+    continue_on_error: bool = typer.Option(False, help="Continue if one page fails."),
 ) -> None:
     """Fetch Liquipedia page wikitext through the MediaWiki API."""
-    scrape_pages(titles, refresh=refresh)
+    scrape_pages(titles, refresh=refresh, continue_on_error=continue_on_error)
+
+@app.command("scrape-events")
+def scrape_events(
+    seed_file: Path = typer.Option(
+        Path("seeds/tournaments.txt"), # default
+        "--seed-file",
+        "-f",
+        help="File containing Liquipedia tournament page titles.",
+    ),
+    refresh: bool = typer.Option(False, help="Re-fetch pages even if cached locally."),
+    continue_on_error: bool = typer.Option(
+        True,
+        help="Continue scraping if one page title fails.",
+    ),
+) -> None:
+    """Fetch tournament pages listed in a seed file."""
+    if not seed_file.exists():
+        console.print(f"[red]Seed file not found:[/red] {seed_file}")
+        raise typer.Exit(code=1)
+
+    titles = read_seed_titles(seed_file)
+
+    if not titles:
+        console.print(f"[yellow]No tournament titles found in:[/yellow] {seed_file}")
+        raise typer.Exit(code=1)
+
+    console.print(f"[bold]Scraping {len(titles)} tournament pages from {seed_file}[/bold]")
+
+    scrape_pages(
+        titles,
+        refresh=refresh,
+        continue_on_error=continue_on_error,
+    )
 
 
 @app.command("list-pages")
@@ -252,6 +296,121 @@ def list_maps(
             row["map_name"],
             score,
             row["winner"] or "",
+        )
+
+    console.print(table)
+
+
+@app.command("list-teams")
+def list_teams(
+    source_page: str | None = typer.Option(
+        None,
+        "--source-page",
+        "-s",
+        help="Only show teams from one Liquipedia source page.",
+    ),
+) -> None:
+    """List parsed teams, optionally filtered by source page."""
+    init_db()
+
+    with connect() as conn:
+        if source_page is None:
+            rows = conn.execute(
+                """
+                WITH team_appearances AS (
+                    SELECT source_page, team_a_id AS team_id
+                    FROM matches
+
+                    UNION ALL
+
+                    SELECT source_page, team_b_id AS team_id
+                    FROM matches
+                )
+                SELECT
+                    ta.source_page,
+                    t.team_id,
+                    t.canonical_name,
+                    COUNT(*) AS appearances
+                FROM team_appearances ta
+                JOIN teams t ON t.team_id = ta.team_id
+                GROUP BY ta.source_page, t.team_id, t.canonical_name
+                ORDER BY ta.source_page, appearances DESC, t.canonical_name;
+                """
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                WITH team_appearances AS (
+                    SELECT source_page, team_a_id AS team_id
+                    FROM matches
+                    WHERE source_page = ?
+
+                    UNION ALL
+
+                    SELECT source_page, team_b_id AS team_id
+                    FROM matches
+                    WHERE source_page = ?
+                )
+                SELECT
+                    ta.source_page,
+                    t.team_id,
+                    t.canonical_name,
+                    COUNT(*) AS appearances
+                FROM team_appearances ta
+                JOIN teams t ON t.team_id = ta.team_id
+                GROUP BY ta.source_page, t.team_id, t.canonical_name
+                ORDER BY appearances DESC, t.canonical_name;
+                """,
+                (source_page, source_page),
+            ).fetchall()
+
+    table = Table(title="Parsed Teams")
+    table.add_column("Source")
+    table.add_column("Team ID")
+    table.add_column("Name")
+    table.add_column("Appearances", justify="right")
+
+    for row in rows:
+        table.add_row(
+            row["source_page"],
+            row["team_id"],
+            row["canonical_name"],
+            str(row["appearances"]),
+        )
+
+    console.print(table)
+
+
+@app.command("backtest-elo")
+def backtest_elo(
+    k_factor: float = typer.Option(32.0, help="Elo K-factor."),
+) -> None:
+    """Run chronological Elo backtests on parsed matches and maps."""
+    init_db()
+
+    results = [
+        backtest_constant_baseline_on_matches(),
+        backtest_overall_elo(k_factor=k_factor),
+        backtest_constant_baseline_on_maps(),
+        backtest_map_elo(k_factor=k_factor),
+    ]
+
+    table = Table(title="Elo Backtest")
+    table.add_column("Model")
+    table.add_column("N", justify="right")
+    table.add_column("Accuracy", justify="right")
+    table.add_column("Log Loss", justify="right")
+    table.add_column("Brier", justify="right")
+
+    for result in results:
+        metrics = result.metrics
+
+        table.add_row(
+            result.name,
+            str(metrics.n),
+            f"{metrics.accuracy:.3f}",
+            f"{metrics.log_loss:.3f}",
+            f"{metrics.brier_score:.3f}",
         )
 
     console.print(table)

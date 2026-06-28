@@ -1,0 +1,75 @@
+# One Liquipedia page title per line.
+# Lines starting with # are ignored.
+
+
+# 2024 S-tier / major events
+PGL/2024/Copenhagen
+Intel Extreme Masters/2024/Cologne
+Esports World Cup/2024
+Intel Extreme Masters/2024/Rio
+ESL/Pro_League/Season_20
+BLAST/Premier/2024/World_Final
+Perfect World/Major/2024/Shanghai
+
+# 2025 S-tier / major events
+Intel Extreme Masters/2025/Katowice
+PGL/2025/Cluj-Napoca
+ESL/Pro_League/Season_21
+BLAST/Open/2025/Spring
+PGL/2025/Bucharest
+Intel Extreme Masters/2025/Melbourne
+BLAST/Rivals/2025/Spring
+PGL/2025/Astana
+Intel Extreme Masters/2025/Dallas
+BLAST/Major/2025/Austin
+FISSURE/Playground/1
+Intel Extreme Masters/2025/Cologne
+Esports World Cup/2025
+FISSURE/Playground/2
+BLAST/Open/2025/Fall
+ESL/Pro_League/Season_22
+StarLadder/2025/Major
+Intel Extreme Masters/2025/Chengdu
+BLAST/Rivals/2025/Fall
+
+# 2026 events so far
+BLAST/Bounty/2026/Winter
+Intel Extreme Masters/2026/Kraków
+PGL/2026/Cluj-Napoca
+ESL/Pro_League/Season_23
+BLAST/Open/2026/Spring
+PGL/2026/Bucharest
+Intel Extreme Masters/2026/Rio
+BLAST/Rivals/2026/Spring
+PGL/2026/Astana
+Intel Extreme Masters/2026/Cologne
+
+# MAJORS (normal major pages only include show matches)
+
+# PGL Copenhagen Major 2024
+PGL/2024/Copenhagen/Opening_Stage
+PGL/2024/Copenhagen/Elimination_Stage
+PGL/2024/Copenhagen/Playoff_Stage
+
+# Perfect World Shanghai Major 2024
+Perfect_World/Major/2024/Shanghai/Opening_Stage
+Perfect_World/Major/2024/Shanghai/Elimination_Stage
+Perfect_World/Major/2024/Shanghai/Playoff_Stage
+
+# BLAST Austin Major 2025
+BLAST/Major/2025/Austin/Stage_1
+BLAST/Major/2025/Austin/Stage_2
+BLAST/Major/2025/Austin/Stage_3
+BLAST/Major/2025/Austin/Playoffs
+
+# StarLadder Budapest Major 2025
+StarLadder/2025/Major/Stage_1
+StarLadder/2025/Major/Stage_2
+StarLadder/2025/Major/Stage_3
+StarLadder/2025/Major/Playoffs
+
+# IEM Cologne Major 2026
+Intel_Extreme_Masters/2026/Cologne/Stage_1
+Intel_Extreme_Masters/2026/Cologne/Stage_2
+Intel_Extreme_Masters/2026/Cologne/Stage_3
+Intel_Extreme_Masters/2026/Cologne/Playoffs

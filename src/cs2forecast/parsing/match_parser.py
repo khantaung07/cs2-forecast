@@ -4,7 +4,7 @@ import mwparserfromhell
 from mwparserfromhell.nodes import Template
 
 from cs2forecast.parsing.models import ParsedEvent, ParsedMapResult, ParsedMatch, ParsedTeam
-from cs2forecast.parsing.normalization import clean_text, stable_id, team_id_from_name
+from cs2forecast.parsing.normalization import clean_text, stable_id, canonical_team_id
 
 from datetime import datetime, timedelta, timezone
 
@@ -59,11 +59,11 @@ def extract_team_id_from_opponent(value: str | None) -> str | None:
         # Positional parameter 1 in {{TeamOpponent|tl}}
         if template.has("1"):
             team = clean_text(template.get("1").value)
-            return team_id_from_name(team)
+            return canonical_team_id(team)
 
     # Fallback if it somehow is plain text.
     cleaned = clean_text(value)
-    return team_id_from_name(cleaned) if cleaned else None
+    return canonical_team_id(cleaned) if cleaned else None
 
 
 def extract_team_display_name_from_opponent(value: str | None) -> str | None:

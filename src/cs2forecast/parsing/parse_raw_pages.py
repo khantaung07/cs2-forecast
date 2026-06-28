@@ -19,9 +19,9 @@ def parse_raw_pages() -> None:
     raw_pages = list_raw_pages_with_text()
 
     total_events = 0
-    total_teams = 0
     total_matches = 0
     total_maps = 0
+    all_team_ids: set[str] = set()
 
     for raw_page in raw_pages:
         title = raw_page["title"]
@@ -44,19 +44,26 @@ def parse_raw_pages() -> None:
         for map_result in map_results:
             upsert_map_result(map_result)
 
+        unique_team_ids = {team.team_id for team in teams}
+        all_team_ids.update(unique_team_ids)
+
         total_events += len(events)
-        total_teams += len(teams)
         total_matches += len(matches)
         total_maps += len(map_results)
 
         console.print(
             f"[green]parsed[/green] {title}: "
-            f"events={len(events)} teams={len(teams)} "
-            f"matches={len(matches)} maps={len(map_results)}"
+            f"events={len(events)} "
+            f"unique_teams={len(unique_team_ids)} "
+            f"team_entries={len(teams)} "
+            f"matches={len(matches)} "
+            f"maps={len(map_results)}"
         )
 
     console.print(
         f"[bold]Done.[/bold] "
-        f"events={total_events} teams={total_teams} "
-        f"matches={total_matches} maps={total_maps}"
+        f"events={total_events} "
+        f"unique_teams={len(all_team_ids)} "
+        f"matches={total_matches} "
+        f"maps={total_maps}"
     )

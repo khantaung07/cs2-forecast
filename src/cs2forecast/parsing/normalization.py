@@ -32,3 +32,49 @@ def stable_id(*parts: str) -> str:
 
 def team_id_from_name(name: str) -> str:
     return slugify(name)
+
+TEAM_ID_ALIASES = {
+    # Vitality
+    "vitality": "vit",
+    "team_vitality": "vit",
+
+    # Liquid
+    "liquid": "tl",
+    "team_liquid": "tl",
+
+    # Complexity
+    "complexity": "col",
+    "complexity_gaming": "col",
+
+    # Eternal Fire
+    "eternal_fire": "ef",
+
+    # The MongolZ
+    "the_mongolz": "mongolz",
+
+    # GamerLegion
+    "gamerlegion": "gl",
+    "gamer_legion": "gl",
+
+    # Virtus.pro
+    "virtus_pro": "vp",
+    "virtuspro": "vp",
+
+    # NAVI
+    "natus_vincere": "navi",
+    "navi": "navi",
+
+    # FaZe
+    "faze_clan": "faze",
+
+    # 3DMAX
+    "3d_max": "3dmax",
+
+    # paiN
+    "pain_gaming": "pain",
+}
+
+
+def canonical_team_id(value: str) -> str:
+    raw_id = team_id_from_name(value)
+    return TEAM_ID_ALIASES.get(raw_id, raw_id)
