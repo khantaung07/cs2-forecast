@@ -3,6 +3,12 @@ from typing import Any
 
 from cs2forecast.storage.db import connect
 
+from cs2forecast.parsing.models import (
+    ParsedEvent,
+    ParsedMapResult,
+    ParsedMatch,
+    ParsedTeam,
+)
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -130,14 +136,6 @@ def finish_scrape_run(
                 scrape_run_id,
             ),
         )
-
-
-from cs2forecast.parsing.models import (
-    ParsedEvent,
-    ParsedMapResult,
-    ParsedMatch,
-    ParsedTeam,
-)
 
 
 def upsert_event(event: ParsedEvent) -> None:

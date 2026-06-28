@@ -60,9 +60,12 @@ BLAST/Major/2025/Austin/Stage_1
 BLAST/Major/2025/Austin/Stage_2
 BLAST/Major/2025/Austin/Stage_3
 BLAST/Major/2025/Austin/Playoffs
+```
 
 Avoid:
 
+```text
 BLAST/Major/2025/Austin
+```
 
 The root overview page contains only summary/showmatch templates, while the real match data is usually stored on the stage subpages.

@@ -21,11 +21,52 @@ from cs2forecast.backtesting.elo_backtest import (
     backtest_overall_elo,
 )
 
+from cs2forecast.backtesting.enhanced_backtest import (
+    EnhancedEloConfig,
+    backtest_constant_50_50_filtered,
+    backtest_dynamic_elo_filtered,
+    backtest_enhanced_dynamic_elo,
+    backtest_enhanced_elo,
+    backtest_overall_elo_filtered,
+    grid_search_enhanced_elo,
+)
+
+from cs2forecast.backtesting.enhanced_map_backtest import (
+    EnhancedMapEloConfig,
+    backtest_constant_50_50_maps_filtered,
+    backtest_enhanced_map_elo,
+    backtest_overall_map_elo_filtered,
+    backtest_overall_plus_map_elo,
+    backtest_plain_map_elo_filtered,
+)
+
 from pathlib import Path
 from cs2forecast.ingestion.seeds import read_seed_titles
 
 app = typer.Typer(help="CS2 forecasting pipeline.")
 console = Console()
+
+
+def print_backtest_results(title: str, results: list) -> None:
+    table = Table(title=title)
+    table.add_column("Model")
+    table.add_column("N", justify="right")
+    table.add_column("Accuracy", justify="right")
+    table.add_column("Log Loss", justify="right")
+    table.add_column("Brier", justify="right")
+
+    for result in results:
+        metrics = result.metrics
+
+        table.add_row(
+            result.name,
+            str(metrics.n),
+            f"{metrics.accuracy:.3f}",
+            f"{metrics.log_loss:.3f}",
+            f"{metrics.brier_score:.3f}",
+        )
+
+    console.print(table)
 
 
 @app.command("init-db")
@@ -395,22 +436,153 @@ def backtest_elo(
         backtest_map_elo(k_factor=k_factor),
     ]
 
-    table = Table(title="Elo Backtest")
-    table.add_column("Model")
+    print_backtest_results("Elo Backtest", results)
+
+
+@app.command("backtest-enhanced")
+def backtest_enhanced(
+    k_factor: float = typer.Option(32.0, help="Elo K-factor."),
+    min_team_matches: int = typer.Option(
+        5,
+        help="Only score predictions once both teams have this many prior matches.",
+    ),
+    form_decay: float = typer.Option(0.95, help="Recent form decay."),
+    form_weight: float = typer.Option(
+        100.0,
+        help="Rating-point weight for recent form.",
+    ),
+    h2h_shrinkage: float = typer.Option(
+        3.0,
+        help="Shrinkage for head-to-head results.",
+    ),
+    h2h_weight: float = typer.Option(
+        50.0,
+        help="Rating-point weight for head-to-head score.",
+    ),
+) -> None:
+    """Run enhanced pre-ML match backtest."""
+    init_db()
+
+    config = EnhancedEloConfig(
+        k_factor=k_factor,
+        min_team_matches=min_team_matches,
+        form_decay=form_decay,
+        form_weight=form_weight,
+        h2h_shrinkage=h2h_shrinkage,
+        h2h_weight=h2h_weight,
+    )
+
+    results = [
+        backtest_constant_50_50_filtered(
+            min_team_matches=min_team_matches,
+        ),
+        backtest_overall_elo_filtered(
+            k_factor=k_factor,
+            min_team_matches=min_team_matches,
+        ),
+        backtest_dynamic_elo_filtered(
+            min_team_matches=min_team_matches,
+        ),
+        backtest_enhanced_elo(config),
+        backtest_enhanced_dynamic_elo(config),
+    ]
+
+    print_backtest_results("Enhanced Match Backtest", results)
+
+
+@app.command("backtest-enhanced-map")
+def backtest_enhanced_map(
+    overall_k_factor: float = typer.Option(
+        32.0,
+        help="K-factor for overall map-level Elo.",
+    ),
+    map_k_factor: float = typer.Option(
+        32.0,
+        help="K-factor for map-specific Elo.",
+    ),
+    min_team_maps: int = typer.Option(
+        5,
+        help="Only score predictions once both teams have this many prior maps.",
+    ),
+    map_elo_weight: float = typer.Option(
+        0.35,
+        help="Weight applied to map-specific Elo deviation from 1500.",
+    ),
+    map_form_decay: float = typer.Option(
+        0.95,
+        help="Decay for map-specific recent form.",
+    ),
+    map_form_weight: float = typer.Option(
+        100.0,
+        help="Rating-point weight for map-specific recent form.",
+    ),
+) -> None:
+    """Run enhanced pre-ML map backtest."""
+    init_db()
+
+    config = EnhancedMapEloConfig(
+        overall_k_factor=overall_k_factor,
+        map_k_factor=map_k_factor,
+        min_team_maps=min_team_maps,
+        map_elo_weight=map_elo_weight,
+        map_form_decay=map_form_decay,
+        map_form_weight=map_form_weight,
+    )
+
+    results = [
+        backtest_constant_50_50_maps_filtered(
+            min_team_maps=min_team_maps,
+        ),
+        backtest_overall_map_elo_filtered(
+            k_factor=overall_k_factor,
+            min_team_maps=min_team_maps,
+        ),
+        backtest_plain_map_elo_filtered(
+            k_factor=map_k_factor,
+            min_team_maps=min_team_maps,
+        ),
+        backtest_overall_plus_map_elo(config),
+        backtest_enhanced_map_elo(config),
+    ]
+
+    print_backtest_results("Enhanced Map Backtest", results)
+
+
+@app.command("grid-search-enhanced")
+def grid_search_enhanced(
+    min_team_matches: int = typer.Option(
+        5,
+        help="Only score predictions once both teams have this many prior matches.",
+    ),
+    limit: int = typer.Option(20, help="Number of best configurations to show."),
+) -> None:
+    """Grid search enhanced Elo hyperparameters."""
+    init_db()
+
+    rows = grid_search_enhanced_elo(min_team_matches=min_team_matches)
+
+    table = Table(title=f"Enhanced Elo Grid Search min={min_team_matches}")
+    table.add_column("Rank", justify="right")
     table.add_column("N", justify="right")
+    table.add_column("Form Decay", justify="right")
+    table.add_column("Form Weight", justify="right")
+    table.add_column("H2H Shrink", justify="right")
+    table.add_column("H2H Weight", justify="right")
     table.add_column("Accuracy", justify="right")
     table.add_column("Log Loss", justify="right")
     table.add_column("Brier", justify="right")
 
-    for result in results:
-        metrics = result.metrics
-
+    for index, row in enumerate(rows[:limit], start=1):
         table.add_row(
-            result.name,
-            str(metrics.n),
-            f"{metrics.accuracy:.3f}",
-            f"{metrics.log_loss:.3f}",
-            f"{metrics.brier_score:.3f}",
+            str(index),
+            str(row.n),
+            f"{row.form_decay:.2f}",
+            f"{row.form_weight:g}",
+            f"{row.h2h_shrinkage:g}",
+            f"{row.h2h_weight:g}",
+            f"{row.accuracy:.4f}",
+            f"{row.log_loss:.5f}",
+            f"{row.brier_score:.5f}",
         )
 
     console.print(table)

@@ -2,14 +2,6 @@
 # Lines starting with # are ignored.
 
 
-# 2024 S-tier / major events
-PGL/2024/Copenhagen
-Intel Extreme Masters/2024/Cologne
-Esports World Cup/2024
-Intel Extreme Masters/2024/Rio
-ESL/Pro_League/Season_20
-BLAST/Premier/2024/World_Final
-Perfect World/Major/2024/Shanghai
 
 # 2025 S-tier / major events
 Intel Extreme Masters/2025/Katowice
@@ -46,15 +38,6 @@ Intel Extreme Masters/2026/Cologne
 
 # MAJORS (normal major pages only include show matches)
 
-# PGL Copenhagen Major 2024
-PGL/2024/Copenhagen/Opening_Stage
-PGL/2024/Copenhagen/Elimination_Stage
-PGL/2024/Copenhagen/Playoff_Stage
-
-# Perfect World Shanghai Major 2024
-Perfect_World/Major/2024/Shanghai/Opening_Stage
-Perfect_World/Major/2024/Shanghai/Elimination_Stage
-Perfect_World/Major/2024/Shanghai/Playoff_Stage
 
 # BLAST Austin Major 2025
 BLAST/Major/2025/Austin/Stage_1
