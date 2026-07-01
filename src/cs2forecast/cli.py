@@ -48,6 +48,11 @@ from cs2forecast.backtesting.series_backtest import (
     backtest_series_from_plain_map_elo,
 )
 
+from cs2forecast.backtesting.blended_series_backtest import (
+    BlendedSeriesBacktestConfig,
+    backtest_blended_match_series,
+)
+
 from cs2forecast.ingestion.seeds import read_seed_titles
 
 app = typer.Typer(help="CS2 forecasting pipeline.")
@@ -626,3 +631,74 @@ def backtest_series(
     ]
 
     print_backtest_results("Series Backtest", results)
+
+
+@app.command("backtest-blended-series")
+def backtest_blended_series(
+    match_k_factor: float = typer.Option(
+        32.0,
+        help="K-factor for match-level dynamic Elo.",
+    ),
+    map_k_factor: float = typer.Option(
+        32.0,
+        help="K-factor for map-level Elo.",
+    ),
+    min_team_matches: int = typer.Option(
+        5,
+        help="Only score predictions once both teams have this many prior matches.",
+    ),
+    form_decay: float = typer.Option(
+        0.95,
+        help="Recent form decay.",
+    ),
+    form_weight: float = typer.Option(
+        100.0,
+        help="Rating-point weight for recent form.",
+    ),
+    h2h_shrinkage: float = typer.Option(
+        3.0,
+        help="Shrinkage for head-to-head results.",
+    ),
+    h2h_weight: float = typer.Option(
+        50.0,
+        help="Rating-point weight for head-to-head score.",
+    ),
+) -> None:
+    """Backtest blended match-level and map-series probabilities."""
+    init_db()
+
+    config = BlendedSeriesBacktestConfig(
+        match_k_factor=match_k_factor,
+        map_k_factor=map_k_factor,
+        min_team_matches=min_team_matches,
+        form_decay=form_decay,
+        form_weight=form_weight,
+        h2h_shrinkage=h2h_shrinkage,
+        h2h_weight=h2h_weight,
+    )
+
+    results = [
+        backtest_blended_match_series(config, match_weight=1.0),
+        backtest_blended_match_series(config, match_weight=0.9),
+        backtest_blended_match_series(config, match_weight=0.75),
+        backtest_blended_match_series(config, match_weight=0.5),
+        backtest_blended_match_series(config, match_weight=0.25),
+        backtest_blended_match_series(config, match_weight=0.0),
+    ]
+
+    results = [
+        backtest_blended_match_series(config, match_weight=1.0),
+        backtest_blended_match_series(config, match_weight=0.9),
+        backtest_blended_match_series(config, match_weight=0.75),
+        backtest_blended_match_series(config, match_weight=0.65),
+        backtest_blended_match_series(config, match_weight=0.6),
+        backtest_blended_match_series(config, match_weight=0.55),
+        backtest_blended_match_series(config, match_weight=0.5),
+        backtest_blended_match_series(config, match_weight=0.45),
+        backtest_blended_match_series(config, match_weight=0.4),
+        backtest_blended_match_series(config, match_weight=0.25),
+        backtest_blended_match_series(config, match_weight=0.0),
+    ]
+
+    print_backtest_results("Blended Series Backtest", results)
+
