@@ -1,6 +1,7 @@
 import typer
 from rich.console import Console
 from rich.table import Table
+from pathlib import Path
 
 from cs2forecast.ingestion.scrape import scrape_pages
 from cs2forecast.storage.db import init_db
@@ -40,7 +41,13 @@ from cs2forecast.backtesting.enhanced_map_backtest import (
     backtest_plain_map_elo_filtered,
 )
 
-from pathlib import Path
+from cs2forecast.backtesting.series_backtest import (
+    SeriesBacktestConfig,
+    backtest_series_constant_50_50,
+    backtest_series_from_overall_map_elo,
+    backtest_series_from_plain_map_elo,
+)
+
 from cs2forecast.ingestion.seeds import read_seed_titles
 
 app = typer.Typer(help="CS2 forecasting pipeline.")
@@ -586,3 +593,36 @@ def grid_search_enhanced(
         )
 
     console.print(table)
+
+
+@app.command("backtest-series")
+def backtest_series(
+    map_k_factor: float = typer.Option(
+        32.0,
+        help="K-factor for map-level Elo models.",
+    ),
+    min_team_matches: int = typer.Option(
+        5,
+        help="Only score predictions once both teams have this many prior matches.",
+    ),
+    require_full_map_list: bool = typer.Option(
+        False,
+        help="Only score matches where every possible map in the series is observed.",
+    ),
+) -> None:
+    """Run series-level backtests using map probabilities."""
+    init_db()
+
+    config = SeriesBacktestConfig(
+        map_k_factor=map_k_factor,
+        min_team_matches=min_team_matches,
+        require_full_map_list=require_full_map_list,
+    )
+
+    results = [
+        backtest_series_constant_50_50(config),
+        backtest_series_from_overall_map_elo(config),
+        backtest_series_from_plain_map_elo(config),
+    ]
+
+    print_backtest_results("Series Backtest", results)

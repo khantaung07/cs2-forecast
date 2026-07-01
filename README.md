@@ -18,6 +18,11 @@
 
 2. Run predictor for a match
 
+## Backtesting
+
+<insert different backtest, what they do + what inputs to give>
+
+
 
 ## Team alias normalization
 
