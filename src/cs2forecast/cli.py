@@ -81,6 +81,17 @@ def print_backtest_results(title: str, results: list) -> None:
     console.print(table)
 
 
+def print_summary(title: str, rows: list[tuple[str, object]]) -> None:
+    table = Table(title=title)
+    table.add_column("Metric")
+    table.add_column("Value", justify="right")
+
+    for label, value in rows:
+        table.add_row(label, str(value))
+
+    console.print(table)
+
+
 @app.command("init-db")
 def init_database() -> None:
     """Initialise the local SQLite database."""
@@ -242,6 +253,30 @@ def list_matches(
     init_db()
 
     with connect() as conn:
+        summary = conn.execute(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM matches) AS total_matches,
+                (
+                    SELECT SUM(CASE WHEN winner_team_id IS NOT NULL THEN 1 ELSE 0 END)
+                    FROM matches
+                )
+                    AS matches_with_winner,
+                (SELECT COUNT(DISTINCT source_page) FROM matches) AS source_pages,
+                (
+                    SELECT COUNT(DISTINCT team_id)
+                    FROM (
+                        SELECT team_a_id AS team_id FROM matches
+                        UNION
+                        SELECT team_b_id AS team_id FROM matches
+                    )
+                ) AS unique_teams,
+                (SELECT COUNT(DISTINCT map_name) FROM map_results) AS unique_maps,
+                (SELECT COUNT(DISTINCT match_id) FROM map_results) AS matches_with_maps,
+                (SELECT COUNT(*) FROM map_results) AS total_maps;
+            """
+        ).fetchone()
+
         rows = conn.execute(
             """
             SELECT
@@ -271,6 +306,19 @@ def list_matches(
             """,
             (limit,),
         ).fetchall()
+
+    print_summary(
+        "Match Summary",
+        [
+            ("Total matches", summary["total_matches"] or 0),
+            ("Matches with winner", summary["matches_with_winner"] or 0),
+            ("Matches with maps", summary["matches_with_maps"] or 0),
+            ("Total maps", summary["total_maps"] or 0),
+            ("Unique teams", summary["unique_teams"] or 0),
+            ("Unique maps", summary["unique_maps"] or 0),
+            ("Source pages", summary["source_pages"] or 0),
+        ],
+    )
 
     table = Table(title="Parsed Matches")
     table.add_column("Date")
@@ -307,6 +355,37 @@ def list_maps(
     init_db()
 
     with connect() as conn:
+        summary = conn.execute(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM map_results) AS total_maps,
+                (
+                    SELECT SUM(CASE WHEN winner_team_id IS NOT NULL THEN 1 ELSE 0 END)
+                    FROM map_results
+                )
+                    AS maps_with_winner,
+                (SELECT COUNT(DISTINCT map_name) FROM map_results) AS unique_maps,
+                (SELECT COUNT(DISTINCT match_id) FROM map_results) AS matches_with_maps,
+                (
+                    SELECT COUNT(DISTINCT team_id)
+                    FROM (
+                        SELECT m.team_a_id AS team_id
+                        FROM map_results mr
+                        JOIN matches m ON m.match_id = mr.match_id
+                        UNION
+                        SELECT m.team_b_id AS team_id
+                        FROM map_results mr
+                        JOIN matches m ON m.match_id = mr.match_id
+                    )
+                ) AS unique_teams,
+                (
+                    SELECT COUNT(DISTINCT m.source_page)
+                    FROM map_results mr
+                    JOIN matches m ON m.match_id = mr.match_id
+                ) AS source_pages;
+            """
+        ).fetchone()
+
         rows = conn.execute(
             """
             SELECT
@@ -328,6 +407,18 @@ def list_maps(
             """,
             (limit,),
         ).fetchall()
+
+    print_summary(
+        "Map Summary",
+        [
+            ("Total maps", summary["total_maps"] or 0),
+            ("Maps with winner", summary["maps_with_winner"] or 0),
+            ("Matches with maps", summary["matches_with_maps"] or 0),
+            ("Unique teams", summary["unique_teams"] or 0),
+            ("Unique maps", summary["unique_maps"] or 0),
+            ("Source pages", summary["source_pages"] or 0),
+        ],
+    )
 
     table = Table(title="Parsed Map Results")
     table.add_column("Date")
@@ -701,4 +792,3 @@ def backtest_blended_series(
     ]
 
     print_backtest_results("Blended Series Backtest", results)
-
