@@ -53,6 +53,8 @@ from cs2forecast.backtesting.blended_series_backtest import (
     backtest_blended_match_series,
 )
 
+from cs2forecast.prediction.predictor import PredictionConfig, predict_match
+
 from cs2forecast.ingestion.seeds import read_seed_titles
 
 app = typer.Typer(help="CS2 forecasting pipeline.")
@@ -90,6 +92,24 @@ def print_summary(title: str, rows: list[tuple[str, object]]) -> None:
         table.add_row(label, str(value))
 
     console.print(table)
+
+def format_probability(probability: float) -> str:
+    return f"{probability * 100:.1f}%"
+
+
+def parse_map_inputs(
+    maps_csv: str | None,
+    map_options: list[str] | None,
+) -> list[str]:
+    maps: list[str] = []
+
+    if maps_csv:
+        maps.extend(maps_csv.replace(",", " ").split())
+
+    if map_options:
+        maps.extend(map_options)
+
+    return maps
 
 
 @app.command("init-db")
@@ -792,3 +812,132 @@ def backtest_blended_series(
     ]
 
     print_backtest_results("Blended Series Backtest", results)
+
+
+@app.command("predict-match")
+def predict_match_command(
+    team_a: str = typer.Argument(..., help="First team name or ID."),
+    team_b: str = typer.Argument(..., help="Second team name or ID."),
+    best_of: int | None = typer.Option(
+        None,
+        "--best-of",
+        help="Optional series length: 1, 3, or 5.",
+    ),
+    maps_csv: str | None = typer.Option(
+        None,
+        "--maps",
+        help="Optional comma/space-separated map list, e.g. 'nuke,mirage,ancient'.",
+    ),
+    map_options: list[str] | None = typer.Option(
+        None,
+        "--map",
+        "-m",
+        help="Optional repeatable map name, e.g. -m nuke -m mirage -m ancient.",
+    ),
+    match_weight: float = typer.Option(
+        0.5,
+        help="Blend weight for match model when series context is available.",
+    ),
+) -> None:
+    """Predict a CS2 match using the replayed local model state."""
+    init_db()
+
+    maps = parse_map_inputs(maps_csv=maps_csv, map_options=map_options)
+
+    config = PredictionConfig(match_weight=match_weight)
+
+    try:
+        prediction = predict_match(
+            team_a=team_a,
+            team_b=team_b,
+            maps=maps,
+            best_of=best_of,
+            config=config,
+        )
+    except ValueError as error:
+        console.print(f"[red]{error}[/red]")
+        raise typer.Exit(code=1) from error
+
+    title = f"{prediction.team_a_name} vs {prediction.team_b_name}"
+
+    summary_table = Table(title=title)
+    summary_table.add_column("Model")
+    summary_table.add_column(prediction.team_a_name, justify="right")
+    summary_table.add_column(prediction.team_b_name, justify="right")
+
+    summary_table.add_row(
+        "Enhanced Dynamic Match Elo",
+        format_probability(prediction.match_probability_a),
+        format_probability(prediction.match_probability_b),
+    )
+
+    if prediction.series_probability_a is not None:
+        summary_table.add_row(
+            "Series from Overall Map Elo",
+            format_probability(prediction.series_probability_a),
+            format_probability(prediction.series_probability_b or 0.0),
+        )
+
+        summary_table.add_row(
+            f"Blended Final Probability (match_w={prediction.match_weight:g})",
+            f"[bold]{format_probability(prediction.final_probability_a)}[/bold]",
+            f"[bold]{format_probability(prediction.final_probability_b)}[/bold]",
+        )
+    else:
+        summary_table.add_row(
+            "Final Probability",
+            f"[bold]{format_probability(prediction.final_probability_a)}[/bold]",
+            f"[bold]{format_probability(prediction.final_probability_b)}[/bold]",
+        )
+
+    console.print(summary_table)
+
+    signal_table = Table(title="Signals")
+    signal_table.add_column("Signal")
+    signal_table.add_column(prediction.team_a_name, justify="right")
+    signal_table.add_column(prediction.team_b_name, justify="right")
+
+    signal_table.add_row(
+        "Match Elo Rating",
+        f"{prediction.team_a_rating:.1f}",
+        f"{prediction.team_b_rating:.1f}",
+    )
+
+    signal_table.add_row(
+        "Recent Form Score",
+        f"{prediction.team_a_form:.4f}",
+        f"{prediction.team_b_form:.4f}",
+    )
+
+    signal_table.add_row(
+        "H2H Score",
+        f"{prediction.h2h_score_a:.4f}",
+        f"{-prediction.h2h_score_a:.4f}",
+    )
+
+    console.print(signal_table)
+
+    if prediction.maps:
+        map_table = Table(title=f"Map Slots from Overall Map Elo, Bo{prediction.best_of}")
+        map_table.add_column("Map")
+        map_table.add_column(prediction.team_a_name, justify="right")
+        map_table.add_column(prediction.team_b_name, justify="right")
+
+        for map_prediction in prediction.maps:
+            map_table.add_row(
+                map_prediction.map_name,
+                format_probability(map_prediction.team_a_probability),
+                format_probability(map_prediction.team_b_probability),
+            )
+
+        console.print(map_table)
+        console.print(
+            "[dim]Note: map names are displayed for series context; probabilities use "
+            "overall map Elo because map-specific Elo underperformed in backtesting.[/dim]"
+        )
+
+    console.print(
+        f"[dim]Model replayed {prediction.completed_series_count} completed series"
+        f" through {prediction.latest_match_date}.[/dim]"
+    )
+
