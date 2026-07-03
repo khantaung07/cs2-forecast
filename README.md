@@ -1,29 +1,227 @@
 # cs2-predictor
 
-< insert mini description >
+A local CS2 match forecasting pipeline that ingests historical tournament data from Liquipedia, parses completed matches/maps into SQLite, backtests forecasting models chronologically, and predicts match outcomes from the local database.
 
-1. Ingestion layer
-   Fetches raw Liquipedia wikitext through MediaWiki API and stores it.
+The project is split into three layers:
 
-2. Parsing/storage layer
-   Converts raw wikitext into local SQLite tables:
-   matches, map_results, teams, events.
+1. **Ingestion layer**
+   Fetches raw Liquipedia wikitext through the MediaWiki API and stores it locally.
 
-3. Prediction layer
-   Reads only from SQLite and produces predictions.
+2. **Parsing/storage layer**
+   Converts raw wikitext into normalized SQLite tables for `events`, `teams`, `matches`, and `map_results`.
 
-# How to use
+3. **Prediction layer**
+   Replays historical results from SQLite to build model state, then produces match probabilities without fetching live data.
 
-1. Call data from Liquipedia MediaWiki API
+## Current model
 
-2. Run predictor for a match
+The current best model is a blended probability model:
 
-...
+```text
+final_probability =
+    match_weight * enhanced_dynamic_match_probability
+  + (1 - match_weight) * map_series_probability
+```
 
+The match-level component uses:
+
+```text
+Dynamic Elo
++ opponent-adjusted recent form
++ shrinked head-to-head adjustment
+```
+
+When maps or a best-of value are supplied, the predictor also calculates a map-derived series probability using overall map-level Elo and blends it with the match-level probability.
+
+If no maps or best-of value are supplied, the predictor uses the enhanced dynamic match model only.
+
+## Setup
+
+Create and activate a virtual environment:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
+
+Install the package in editable mode:
+
+```bash
+pip install -e ".[dev]"
+```
+
+Initialise the local SQLite database:
+
+```bash
+cs2forecast init-db
+```
+
+## Data ingestion
+
+Tournament pages are listed in:
+
+```text
+seeds/tournaments.txt
+```
+
+Fetch all seeded tournament pages:
+
+```bash
+cs2forecast scrape-events
+```
+
+Re-fetch pages even if they are already cached:
+
+```bash
+cs2forecast scrape-events --refresh
+```
+
+Fetch individual Liquipedia pages manually:
+
+```bash
+cs2forecast scrape "Intel Extreme Masters/2025/Katowice"
+```
+
+List cached raw pages:
+
+```bash
+cs2forecast list-pages
+```
+
+Inspect templates on a cached page:
+
+```bash
+cs2forecast inspect-templates "Intel Extreme Masters/2025/Katowice"
+```
+
+Show examples of a specific template:
+
+```bash
+cs2forecast show-template "Intel Extreme Masters/2025/Katowice" Match
+```
+
+## Parsing
+
+Parse cached raw pages into normalized SQLite tables:
+
+```bash
+cs2forecast parse
+```
+
+Inspect parsed matches:
+
+```bash
+cs2forecast list-matches
+```
+
+Inspect parsed map results:
+
+```bash
+cs2forecast list-maps
+```
+
+Inspect parsed teams:
+
+```bash
+cs2forecast list-teams
+```
+
+Inspect teams from a specific source page:
+
+```bash
+cs2forecast list-teams --source-page "Intel Extreme Masters/2025/Katowice"
+```
+
+## Backtesting
+
+Run baseline Elo backtests:
+
+```bash
+cs2forecast backtest-elo
+```
+
+Run enhanced match-level backtests:
+
+```bash
+cs2forecast backtest-enhanced
+```
+
+Run enhanced match-level backtests with a stricter mature-team filter:
+
+```bash
+cs2forecast backtest-enhanced --min-team-matches 10
+```
+
+Run enhanced map-level experiments:
+
+```bash
+cs2forecast backtest-enhanced-map
+```
+
+Run series-level map aggregation backtests:
+
+```bash
+cs2forecast backtest-series
+```
+
+Run blended match + map-series backtests:
+
+```bash
+cs2forecast backtest-blended-series
+```
+
+Run blended backtests on mature teams:
+
+```bash
+cs2forecast backtest-blended-series --min-team-matches 10
+```
+
+See `README_BACKTESTING.md` for a summary of model results and chosen defaults.
+
+## Prediction
+
+Predict a match using the current local database:
+
+```bash
+cs2forecast predict-match spirit vitality
+```
+
+Predict a known best-of-three:
+
+```bash
+cs2forecast predict-match spirit vitality --best-of 3
+```
+
+Predict with supplied map slots:
+
+```bash
+cs2forecast predict-match spirit vitality --maps dust2,mirage,inferno
+```
+
+Alternatively, pass maps as repeatable options:
+
+```bash
+cs2forecast predict-match spirit vitality -m dust2 -m mirage -m inferno
+```
+
+Example output:
+
+```text
+spirit vs vit
+
+Model                                   spirit   vit
+Enhanced Dynamic Match Elo                29.8%  70.2%
+Series from Overall Map Elo               42.8%  57.2%
+Blended Final Probability (match_w=0.5)   36.3%  63.7%
+```
+
+The predictor works by replaying all completed historical matches/maps from SQLite to rebuild the latest model state. It then predicts the requested matchup from that state. It does not fetch live data.
 
 ## Team alias normalization
 
-Liquipedia pages may refer to the same team using different identifiers across pages or templates. For example, Team Vitality may appear as both `vit` and `vitality`. Since the forecasting model treats `team_id` as the stable team identity, these aliases must be normalized consistently before writing parsed matches to the database.
+Liquipedia pages may refer to the same team using different identifiers across pages or templates. For example, Team Vitality may appear as both `vit` and `vitality`.
+
+Since the forecasting model treats `team_id` as the stable team identity, aliases must be normalized consistently before writing parsed matches to the database.
 
 Team aliases are defined in:
 
@@ -50,8 +248,7 @@ TEAM_ID_ALIASES = {
 
 After updating aliases, rebuild the parsed tables so Elo, recent form, H2H, and map-level features use the corrected canonical team IDs.
 
-
-### Major pages
+## Valve Major pages
 
 For Valve Majors, seed the individual stage pages rather than the root overview page.
 
@@ -70,4 +267,12 @@ Avoid:
 BLAST/Major/2025/Austin
 ```
 
-The root overview page contains only summary/showmatch templates, while the real match data is usually stored on the stage subpages.
+The root overview page usually contains only summary/showmatch templates, while the real match data is stored on the stage subpages.
+
+## Notes and limitations
+
+* The predictor uses only the local SQLite database.
+* It does not scrape HLTV.
+* It does not currently simulate map veto/pick-ban decisions.
+* Supplied map names are used as series context. The current final model uses overall map-level Elo because map-specific Elo underperformed in backtesting.
+* Future improvements could include veto modelling, map pick/ban tendencies, total rounds prediction, and over/under models.
