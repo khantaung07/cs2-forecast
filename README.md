@@ -31,9 +31,11 @@ Dynamic Elo
 + shrinked head-to-head adjustment
 ```
 
-When maps or a best-of value are supplied, the predictor also calculates a map-derived series probability using overall map-level Elo and blends it with the match-level probability.
+When a best-of value or map slots are supplied, the predictor also calculates a series probability using overall map-level Elo and blends it with the match-level probability.
 
-If no maps or best-of value are supplied, the predictor uses the enhanced dynamic match model only.
+The supplied map names currently provide series context only. They do not produce different map-specific probabilities because team-on-map Elo underperformed overall map Elo during backtesting.
+
+If no best-of value or maps are supplied, the predictor uses the enhanced dynamic match model only.
 
 ## Setup
 
@@ -164,7 +166,7 @@ Run series-level map aggregation backtests:
 cs2forecast backtest-series
 ```
 
-Run blended match + map-series backtests:
+Run blended match and map-series backtests:
 
 ```bash
 cs2forecast backtest-blended-series
@@ -176,7 +178,37 @@ Run blended backtests on mature teams:
 cs2forecast backtest-blended-series --min-team-matches 10
 ```
 
-See `README_BACKTESTING.md` for a summary of model results and chosen defaults.
+Run the chronological machine-learning holdout comparison:
+
+```bash
+cs2forecast backtest-ml
+```
+
+Run the ML comparison using the mature-team filter:
+
+```bash
+cs2forecast backtest-ml --min-team-matches 10
+```
+
+This compares logistic regression and histogram gradient boosting against the enhanced dynamic and blended forecasting models.
+
+See [`README_BACKTESTING.md`](README_BACKTESTING.md) for detailed results, evaluation methodology, and model-selection decisions.
+
+## Testing
+
+Run static checks:
+
+```bash
+ruff check src tests
+```
+
+Run the test suite:
+
+```bash
+python -m pytest
+```
+
+The tests cover core probability calculations, binary evaluation metrics, team alias normalization, chronological dataset splitting, ML feature construction, and predictor helper logic.
 
 ## Prediction
 
@@ -271,8 +303,10 @@ The root overview page usually contains only summary/showmatch templates, while 
 
 ## Notes and limitations
 
-* The predictor uses only the local SQLite database.
-* It does not scrape HLTV.
-* It does not currently simulate map veto/pick-ban decisions.
-* Supplied map names are used as series context. The current final model uses overall map-level Elo because map-specific Elo underperformed in backtesting.
-* Future improvements could include veto modelling, map pick/ban tendencies, total rounds prediction, and over/under models.
+* The predictor operates entirely from the local SQLite database.
+* It does not scrape HLTV or fetch live match information.
+* The database must be refreshed and reparsed to incorporate new tournament results.
+* The predictor does not simulate map veto or pick-ban decisions.
+* Supplied map names currently provide series context only. The selected series model uses overall map-level Elo because map-specific Elo and map-specific recent form underperformed during backtesting.
+* The ML models were evaluated experimentally but did not outperform the hand-built blended model.
+* Potential future extensions include additional Liquipedia tournament coverage, automated data-quality checks, total-round prediction, and over/under modelling.

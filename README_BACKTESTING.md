@@ -21,7 +21,7 @@ For filtered evaluations, `min_team_matches` only controls when predictions are 
 
 Initial chronological Elo tests showed that overall team Elo is a strong baseline.
 
-```text id="3dkglt"
+```
 Model                     N      Accuracy   Log Loss   Brier
 Constant 50/50 Match      1025   0.546      0.693      0.250
 Overall Elo               1025   0.618      0.643      0.226
@@ -36,7 +36,7 @@ Overall match Elo substantially improved over the 50/50 baseline. Plain map-spec
 
 The enhanced match model adds:
 
-```text id="02me2j"
+```
 overall Elo
 + dynamic K-factor
 + opponent-adjusted recent form
@@ -45,7 +45,7 @@ overall Elo
 
 Chosen configuration:
 
-```text id="cwsbku"
+```
 form_decay = 0.95
 form_weight = 100
 h2h_shrinkage = 3
@@ -54,7 +54,7 @@ h2h_weight = 50
 
 ### Results: `min_team_matches=5`
 
-```text id="4kagfo"
+```
 Model                                      N     Accuracy   Log Loss   Brier
 Constant 50/50                            783   0.548      0.693      0.250
 Overall Elo                               783   0.644      0.628      0.220
@@ -65,7 +65,7 @@ Enhanced Dynamic Elo                      783   0.639      0.625      0.218
 
 ### Results: `min_team_matches=10`
 
-```text id="qfhgys"
+```
 Model                                      N     Accuracy   Log Loss   Brier
 Constant 50/50                            632   0.554      0.693      0.250
 Overall Elo                               632   0.661      0.623      0.217
@@ -82,7 +82,7 @@ The map-level experiments tested whether map-specific information improves indiv
 
 Compared models:
 
-```text id="0qyixa"
+```
 Overall Map Elo       = team strength across all maps
 Plain Map Elo         = separate rating per team per map
 Overall + Map Elo     = overall map strength + map-specific adjustment
@@ -91,7 +91,7 @@ Enhanced Map Elo      = overall + map-specific Elo + map-specific recent form
 
 ### Results: `min_team_maps=5`
 
-```text id="qkv4iq"
+```
 Model                                      N      Accuracy   Log Loss   Brier
 Constant 50/50 Map                         1996   0.535      0.693      0.250
 Overall Map Elo                            1996   0.609      0.661      0.234
@@ -102,7 +102,7 @@ Enhanced Map Elo                           1996   0.610      0.663      0.235
 
 ### Results: `min_team_maps=10`
 
-```text id="ydh9m0"
+```
 Model                                      N      Accuracy   Log Loss   Brier
 Constant 50/50 Map                         1776   0.535      0.693      0.250
 Overall Map Elo                            1776   0.620      0.656      0.231
@@ -119,7 +119,7 @@ The series-level backtest converts map win probabilities into Bo1/Bo3/Bo5 match 
 
 This answers:
 
-```text id="e14cx2"
+```
 Given the maps in the series, can map-level probabilities predict the match winner?
 ```
 
@@ -127,7 +127,7 @@ This does **not** simulate veto. It uses observed/known maps from the parsed mat
 
 ### Results: `min_team_matches=5`
 
-```text id="vy5u33"
+```
 Model                              N     Accuracy   Log Loss   Brier
 Constant 50/50 Series              783   0.548      0.693      0.250
 Series from Overall Map Elo        783   0.637      0.629      0.219
@@ -136,7 +136,7 @@ Series from Plain Map Elo          783   0.644      0.630      0.220
 
 ### Results: `min_team_matches=10`
 
-```text id="0ks4p8"
+```
 Model                              N     Accuracy   Log Loss   Brier
 Constant 50/50 Series              632   0.554      0.693      0.250
 Series from Overall Map Elo        632   0.650      0.627      0.217
@@ -151,7 +151,7 @@ A diagnostic `--require-full-map-list` run showed stronger plain map Elo perform
 
 The best model so far blends:
 
-```text id="z8dqmm"
+```
 Enhanced Dynamic Match Elo
 +
 Series probability from Overall Map Elo
@@ -159,7 +159,7 @@ Series probability from Overall Map Elo
 
 The final probability is:
 
-```text id="2smdb3"
+```
 final_prob =
     match_weight * enhanced_dynamic_match_probability
   + (1 - match_weight) * map_series_probability
@@ -169,7 +169,7 @@ This tests whether map-series probabilities provide complementary signal on top 
 
 ### Results: `min_team_matches=10`
 
-```text id="os5nft"
+```
 Model                                  N     Accuracy   Log Loss   Brier
 Blend Match+Map match_w=1.00           632   0.657      0.619      0.215
 Blend Match+Map match_w=0.90           632   0.658      0.618      0.215
@@ -186,57 +186,128 @@ Blend Match+Map match_w=0.00           632   0.650      0.627      0.217
 
 The pure enhanced dynamic match model achieved `0.619` log loss. The pure map-series model achieved `0.627` log loss. Blended models around `match_weight=0.50–0.75` achieved the best result of approximately:
 
-```text id="es4xap"
+```
 Log Loss: 0.616
 Brier:    0.214
 ```
 
 This is the best backtested result so far.
 
+## 6. Machine Learning Comparison
+
+Logistic regression and histogram gradient boosting were evaluated using a fixed chronological holdout.
+
+Pre-match features included:
+
+```text
+enhanced dynamic match probability
+overall-map series probability
+dynamic Elo rating difference
+recent-form difference
+shrinked H2H score
+overall map-Elo difference
+team match-history counts
+best-of format
+```
+
+All features were calculated before the corresponding match result was processed. The earliest 70% of eligible matches were used for training, and the final 30% were retained for testing. The ML models remained fixed during the test period, while the underlying Elo, form, H2H, and map-rating states continued to update chronologically as results became available.
+
+### Holdout results: `min_team_matches=5`
+
+```text
+Model                              N     Accuracy   Log Loss   Brier
+Constant 50/50 Holdout             235   0.562      0.693      0.250
+Enhanced Dynamic Match Holdout     235   0.668      0.592      0.203
+Blended Match+Map Holdout          235   0.681      0.590      0.203
+Logistic Regression                235   0.647      0.602      0.210
+Histogram Gradient Boosting        235   0.621      0.630      0.221
+```
+
+Training rows: 548. Test rows: 235. The test period began on February 15, 2026.
+
+### Holdout results: `min_team_matches=10`
+
+```text
+Model                              N     Accuracy   Log Loss   Brier
+Constant 50/50 Holdout             190   0.537      0.693      0.250
+Enhanced Dynamic Match Holdout     190   0.647      0.607      0.211
+Blended Match+Map Holdout          190   0.658      0.606      0.211
+Logistic Regression                190   0.632      0.615      0.215
+Histogram Gradient Boosting        190   0.626      0.638      0.224
+```
+
+Training rows: 442. Test rows: 190. The test period began on February 21, 2026.
+
+Neither ML model outperformed the manually constructed blended model. Logistic regression remained competitive, but did not combine the existing signals more effectively than the validated match-and-map blend. Histogram gradient boosting performed substantially worse, likely because the available training dataset was too small for stable nonlinear modelling.
+
+The holdout scores above should not be compared directly with the earlier `0.616` blended-backtest result because they use different evaluation periods. Within both evaluation regimes, however, the blended match-and-map model achieved the best probability metrics.
+
 ## Current Best Model
 
-When maps are unknown:
+When no series context is supplied:
 
-```text id="hltvi0"
+```text
 Enhanced Dynamic Match Elo
 ```
 
-When maps are supplied:
+When a best-of value or series context is supplied:
 
-```text id="ovbynq"
+```text
 Blended Match + Map-Series Model
 ```
 
-Practical default:
+The practical default is:
 
-```text id="w3qiy7"
+```text
 match_weight = 0.50
 ```
 
-This uses both match-level team strength/form/H2H and map-derived series structure.
+The final probability is therefore:
+
+```text
+final_probability =
+    0.50 * enhanced_dynamic_match_probability
+  + 0.50 * overall_map_series_probability
+```
+
+This combines match-level Elo, recent form, H2H, and dynamic K-factor information with series structure derived from overall map-level strength.
+
+The current series component does not simulate vetoes and does not assign different probabilities to individual named maps. Overall map Elo was selected because map-specific Elo and map-specific recent form underperformed during backtesting.
 
 ## Main Conclusions
 
-1. Overall Elo is a strong baseline for CS2 match prediction.
-2. Dynamic K, recent form, and shrinked H2H improve match-level calibration.
-3. Individual map-specific Elo is weaker than overall map Elo, likely due to sparse team-map history.
-4. Map-series probabilities are competitive but weaker than the enhanced match model on their own.
-5. Blending match-level and map-series probabilities gives the best result so far.
-6. Future map improvements likely require veto/pick-ban context rather than simply increasing map Elo or map form weight.
+1. Overall Elo provides a strong baseline for CS2 match prediction.
+2. Dynamic K-factor, opponent-adjusted recent form, and shrinked H2H improve match-level probability calibration.
+3. Overall map Elo predicts individual maps more effectively than sparse team-on-map Elo.
+4. A standalone map-series model is competitive, but weaker than the enhanced dynamic match model.
+5. Blending match-level and map-series probabilities produces the strongest results.
+6. Logistic regression and histogram gradient boosting did not improve on the hand-built blended model.
+7. Richer map modelling would likely require reliable veto, pick/ban, and map-pool data.
 
-## Next Steps
+## Final Status
 
-```text id="me5k82"
-Build the actual predictor command.
+The completed forecasting pipeline supports:
+
+```text
+Liquipedia MediaWiki API ingestion
+local raw-page caching
+wikitext parsing
+normalized SQLite storage
+team alias normalization
+chronological model backtesting
+match-level and map-level Elo models
+series probability calculation
+blended match and map-series prediction
+logistic regression and gradient-boosting comparisons
+local command-line match prediction
 ```
 
-Expected CLI shape:
+Example predictions:
 
-```bash id="h0ct3z"
-cs2forecast predict-match vitality mouz
-cs2forecast predict-match vitality mouz --maps nuke mirage ancient
+```bash
+cs2forecast predict-match vitality faze
+cs2forecast predict-match vitality faze --best-of 3
+cs2forecast predict-match vitality faze --maps nuke,mirage,ancient
 ```
 
-When maps are not provided, the predictor should use the enhanced dynamic match model.
-
-When maps are provided, the predictor should also calculate the map-series probability and return the blended probability.
+The predictor replays the completed historical data in SQLite to construct the latest model state, then produces one probability for the requested matchup. It does not fetch live match data.

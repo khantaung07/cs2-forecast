@@ -53,6 +53,8 @@ from cs2forecast.backtesting.blended_series_backtest import (
     backtest_blended_match_series,
 )
 
+from cs2forecast.backtesting.ml_backtest import run_ml_backtest
+
 from cs2forecast.prediction.predictor import PredictionConfig, predict_match
 
 from cs2forecast.ingestion.seeds import read_seed_titles
@@ -941,3 +943,68 @@ def predict_match_command(
         f" through {prediction.latest_match_date}.[/dim]"
     )
 
+@app.command("backtest-ml")
+def backtest_ml(
+    min_team_matches: int = typer.Option(
+        5,
+        help="Only include rows once both teams have this many prior matches.",
+    ),
+    train_fraction: float = typer.Option(
+        0.7,
+        help="Chronological fraction used to train the ML models.",
+    ),
+    logistic_c: float = typer.Option(
+        1.0,
+        help="Inverse regularization strength for logistic regression.",
+    ),
+) -> None:
+    """Backtest logistic regression and gradient boosting chronologically."""
+    init_db()
+
+    try:
+        report = run_ml_backtest(
+            min_team_matches=min_team_matches,
+            train_fraction=train_fraction,
+            logistic_c=logistic_c,
+        )
+    except ValueError as error:
+        console.print(f"[red]{error}[/red]")
+        raise typer.Exit(code=1) from error
+
+    print_backtest_results(
+        "Chronological ML Holdout Backtest",
+        report.results,
+    )
+
+    console.print(
+        f"[dim]Training rows: {report.train_size}; "
+        f"test rows: {report.test_size}; "
+        f"test period begins: {report.first_test_date}.[/dim]"
+    )
+
+    coefficient_table = Table(
+        title="Logistic Regression Coefficients"
+    )
+    coefficient_table.add_column("Feature")
+    coefficient_table.add_column(
+        "Coefficient",
+        justify="right",
+    )
+
+    sorted_coefficients = sorted(
+        report.logistic_coefficients,
+        key=lambda item: abs(item[1]),
+        reverse=True,
+    )
+
+    for feature_name, coefficient in sorted_coefficients:
+        coefficient_table.add_row(
+            feature_name,
+            f"{coefficient:+.4f}",
+        )
+
+    console.print(coefficient_table)
+    console.print(
+        "[dim]Coefficients are based on standardized features. "
+        "Positive values favour Team A.[/dim]"
+    )
