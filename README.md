@@ -280,6 +280,45 @@ TEAM_ID_ALIASES = {
 
 After updating aliases, rebuild the parsed tables so Elo, recent form, H2H, and map-level features use the corrected canonical team IDs.
 
+## Finding tournament page titles
+
+Liquipedia page titles are the values passed to the scraper and added to:
+
+```text
+seeds/tournaments.txt
+```
+
+The easiest way to find a title is to open the tournament page on Liquipedia and copy the part of the URL after `/counterstrike/`.
+
+For example:
+
+```text
+https://liquipedia.net/counterstrike/Intel_Extreme_Masters/2025/Katowice
+```
+
+becomes:
+
+```text
+Intel Extreme Masters/2025/Katowice
+```
+
+Replace underscores with spaces when adding the title to the seed file.
+
+You can verify that a title is valid by fetching it directly:
+
+```bash
+cs2forecast scrape "Intel Extreme Masters/2025/Katowice"
+```
+
+Then inspect the cached page:
+
+```bash
+cs2forecast inspect-templates "Intel Extreme Masters/2025/Katowice"
+```
+
+A useful tournament page should contain match-related templates such as `Match`. If the page contains only summary or showmatch templates, the actual match data may be stored on separate stage or playoff subpages.
+
+
 ## Valve Major pages
 
 For Valve Majors, seed the individual stage pages rather than the root overview page.
@@ -300,6 +339,11 @@ BLAST/Major/2025/Austin
 ```
 
 The root overview page usually contains only summary/showmatch templates, while the real match data is stored on the stage subpages.
+
+## Acknowledgements
+
+This project uses [mwparserfromhell](https://github.com/earwig/mwparserfromhell), developed by Earwig and contributors, to parse MediaWiki wikicode retrieved from Liquipedia.
+
 
 ## Notes and limitations
 

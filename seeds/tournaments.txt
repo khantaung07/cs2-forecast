@@ -35,6 +35,7 @@ Intel Extreme Masters/2026/Rio
 BLAST/Rivals/2026/Spring
 PGL/2026/Astana
 Intel Extreme Masters/2026/Cologne
+XSE_Pro_League/2026
 
 # MAJORS (normal major pages only include show matches)
 
