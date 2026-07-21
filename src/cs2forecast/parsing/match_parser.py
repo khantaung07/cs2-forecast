@@ -238,7 +238,12 @@ def parse_match_templates_from_page(
     *,
     source_page: str,
     wikitext: str,
-) -> tuple[list[ParsedEvent], list[ParsedTeam], list[ParsedMatch], list[ParsedMapResult]]:
+) -> tuple[
+    list[ParsedEvent],
+    list[ParsedTeam],
+    list[ParsedMatch],
+    list[ParsedMapResult],
+]:
     wikicode = mwparserfromhell.parse(wikitext)
 
     events: list[ParsedEvent] = []
@@ -263,7 +268,16 @@ def parse_match_templates_from_page(
             continue
 
         finished = clean_param(template, "finished")
-        if finished != "true":
+
+        explicitly_finished = finished == "true"
+        infer_finished_from_maps = finished is None
+
+        # Reject matches explicitly marked unfinished, such as:
+        # |finished=false
+        #
+        # When |finished= is blank, we may still accept the match if its
+        # completed maps establish a valid series winner.
+        if not explicitly_finished and not infer_finished_from_maps:
             continue
 
         opponent1_raw = get_param(template, "opponent1")
@@ -275,21 +289,60 @@ def parse_match_templates_from_page(
         if not team_a_id or not team_b_id:
             continue
 
-        team_a_name = extract_team_display_name_from_opponent(opponent1_raw) or team_a_id
-        team_b_name = extract_team_display_name_from_opponent(opponent2_raw) or team_b_id
+        team_a_name = (
+            extract_team_display_name_from_opponent(opponent1_raw)
+            or team_a_id
+        )
+        team_b_name = (
+            extract_team_display_name_from_opponent(opponent2_raw)
+            or team_b_id
+        )
 
-        teams.append(ParsedTeam(team_id=team_a_id, canonical_name=team_a_name))
-        teams.append(ParsedTeam(team_id=team_b_id, canonical_name=team_b_name))
+        teams.append(
+            ParsedTeam(
+                team_id=team_a_id,
+                canonical_name=team_a_name,
+            )
+        )
+        teams.append(
+            ParsedTeam(
+                team_id=team_b_id,
+                canonical_name=team_b_name,
+            )
+        )
 
         date = parse_date(get_param(template, "date"))
-
         hltv_id = clean_param(template, "hltv")
 
-        # Prefer HLTV id if available because it is stable and unique.
+        # Prefer the HLTV ID because it is stable and unique.
         match_id = (
             f"hltv_{hltv_id}"
             if hltv_id
-            else stable_id(source_page, date or "unknown_date", team_a_id, team_b_id)
+            else stable_id(
+                source_page,
+                date or "unknown_date",
+                team_a_id,
+                team_b_id,
+            )
+        )
+
+        # Infer the intended series format from the map slots.
+        #
+        # A BO3 normally contains map1-map3, even when the final map
+        # is skipped because one team wins the first two maps.
+        best_of: int | None = None
+
+        if template.has("map5"):
+            best_of = 5
+        elif template.has("map3"):
+            best_of = 3
+        elif template.has("map1"):
+            best_of = 1
+
+        wins_required = (
+            best_of // 2 + 1
+            if best_of is not None
+            else None
         )
 
         parsed_maps_for_match: list[ParsedMapResult] = []
@@ -305,26 +358,45 @@ def parse_match_templates_from_page(
                 continue
 
             map_finished = get_map_param(map_template, "finished")
+
             if map_finished == "skip":
                 continue
 
+            # If the outer match completion flag is blank, only use maps
+            # that are themselves explicitly marked as completed.
+            #
+            # This prevents an ongoing match from being inferred as finished.
+            if infer_finished_from_maps and map_finished != "true":
+                continue
+
             map_name = get_map_param(map_template, "map")
+
             if not map_name:
                 continue
 
-            team_a_score = compute_team_score(map_template, team_number=1)
-            team_b_score = compute_team_score(map_template, team_number=2)
+            team_a_score = compute_team_score(
+                map_template,
+                team_number=1,
+            )
+            team_b_score = compute_team_score(
+                map_template,
+                team_number=2,
+            )
 
-            winner_team_id = None
+            map_winner_team_id: str | None = None
 
             if team_a_score > team_b_score:
-                winner_team_id = team_a_id
+                map_winner_team_id = team_a_id
                 team_a_maps_won += 1
             elif team_b_score > team_a_score:
-                winner_team_id = team_b_id
+                map_winner_team_id = team_b_id
                 team_b_maps_won += 1
 
-            map_result_id = stable_id(match_id, str(map_index), map_name)
+            map_result_id = stable_id(
+                match_id,
+                str(map_index),
+                map_name,
+            )
 
             parsed_maps_for_match.append(
                 ParsedMapResult(
@@ -334,33 +406,45 @@ def parse_match_templates_from_page(
                     map_name=map_name,
                     team_a_score=team_a_score,
                     team_b_score=team_b_score,
-                    winner_team_id=winner_team_id,
+                    winner_team_id=map_winner_team_id,
                 )
             )
 
-        winner_team_id = None
+        winner_team_id: str | None = None
+
         if team_a_maps_won > team_b_maps_won:
             winner_team_id = team_a_id
         elif team_b_maps_won > team_a_maps_won:
             winner_team_id = team_b_id
 
-        best_of = None
-        if parsed_maps_for_match:
-            # BO3 usually has map1-map3 slots, even if map3 is skipped.
-            # For now infer from available map slots in the template.
-            if template.has("map5"):
-                best_of = 5
-            elif template.has("map3"):
-                best_of = 3
-            elif template.has("map1"):
-                best_of = 1
+        # When the outer |finished= value was blank, only accept the match
+        # if its completed maps establish a valid series victory.
+        #
+        # Examples:
+        # BO1 requires 1 map win.
+        # BO3 requires 2 map wins.
+        # BO5 requires 3 map wins.
+        if infer_finished_from_maps:
+            completed_from_maps = (
+                wins_required is not None
+                and winner_team_id is not None
+                and max(team_a_maps_won, team_b_maps_won)
+                >= wins_required
+            )
+
+            if not completed_from_maps:
+                continue
+
+        # Avoid reporting a series format when no maps were successfully
+        # parsed. This preserves the previous behaviour for forfeits.
+        parsed_best_of = best_of if parsed_maps_for_match else None
 
         matches.append(
             ParsedMatch(
                 match_id=match_id,
                 event_id=event_id,
                 date=date,
-                best_of=best_of,
+                best_of=parsed_best_of,
                 team_a_id=team_a_id,
                 team_b_id=team_b_id,
                 winner_team_id=winner_team_id,
